@@ -5,66 +5,56 @@ from oauth2client.service_account import ServiceAccountCredentials
 import plotly.express as px
 import os
 
-# --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Monitor de Lechería", layout="wide")
+st.set_page_config(page_title="Monitor Lechería Pro", layout="wide")
 
 def load_data():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
-    # 1. Forzamos la ruta al archivo local que ya vimos que existe
-    ruta_credenciales = "credenciales.json"
-    
     try:
-        # Verificación de seguridad
-        if not os.path.exists(ruta_credenciales):
-            st.error(f"No se encuentra el archivo {ruta_credenciales} en {os.getcwd()}")
+        # LÓGICA HÍBRIDA DE SEGURIDAD
+        if "gcp_service_account" in st.secrets:
+            # Si estamos en la NUBE (Streamlit Cloud)
+            creds_info = st.secrets["gcp_service_account"]
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
+        elif os.path.exists("credenciales.json"):
+            # Si estamos en LOCAL (Tu computadora)
+            creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+        else:
+            st.error("❌ No se encontraron credenciales (ni en la nube ni local).")
             return None
-            
-        creds = ServiceAccountCredentials.from_json_keyfile_name(ruta_credenciales, scope)
+
         client = gspread.authorize(creds)
+        # Asegúrate de que el nombre coincida con tu Drive
+        sheet = client.open("Registro de Producción Lechera").sheet1
         
-        # 2. Abrir la hoja (Asegúrate que el nombre en Google Drive sea este exacto)
-        # Si el nombre es distinto, cámbialo aquí:
-        nombre_hoja = "Datos Lechería" 
-        sheet = client.open(nombre_hoja).sheet1
+        df = pd.DataFrame(sheet.get_all_records())
         
-        data = sheet.get_all_records()
-        df = pd.DataFrame(data)
-        
-        # --- LIMPIEZA DE DATOS (Basada en tus imágenes) ---
-        df.columns = df.columns.str.strip() # Soluciona el error de la imagen image_a6d124.png
+        # Limpieza de columnas
+        df.columns = df.columns.str.strip()
         df = df[df['Nombre Vaca'] != ""].copy()
-        
-        # Conversión de tipos
         df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
         df['Cantidad litros'] = pd.to_numeric(df['Cantidad litros'], errors='coerce')
         
         return df
     except Exception as e:
-        st.error(f"Error al conectar con Google Sheets: {e}")
+        st.error(f"Error de conexión: {e}")
         return None
 
-# --- INTERFAZ VISUAL ---
-st.title("🥛 Monitor de Producción Lechera")
+# --- RENDERIZADO DE LA APP ---
 df = load_data()
 
 if df is not None:
-    # Filtros
-    vacas = sorted(df['Nombre Vaca'].unique())
-    seleccion = st.sidebar.multiselect("Seleccionar Vacas:", vacas, default=vacas)
-    df_f = df[df['Nombre Vaca'].isin(seleccion)]
-
+    st.title("🥛 Monitor de Producción Real-Time")
+    
     # KPIs Rápidos
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Litros", f"{df_f['Cantidad litros'].sum():,.1f}")
-    c2.metric("Promedio/Vaca", f"{df_f['Cantidad litros'].mean():,.2f}")
-    c3.metric("Última Fecha", df_f['Fecha'].max().strftime('%d/%m/%Y'))
+    c1.metric("Total Litros", f"{df['Cantidad litros'].sum():,.1f}")
+    c2.metric("Promedio/Vaca", f"{df['Cantidad litros'].mean():,.2f}")
+    c3.metric("Última Fecha", df['Fecha'].max().strftime('%d/%m/%Y'))
 
-    # Gráfico de producción
-    fig = px.line(df_f, x='Fecha', y='Cantidad litros', color='Nombre Vaca', markers=True,
-                 title="Evolución de Producción por Vaca")
+    # Gráfico de Evolución
+    fig = px.line(df, x='Fecha', y='Cantidad litros', color='Nombre Vaca', markers=True)
     st.plotly_chart(fig, use_container_width=True)
-
-    # Tabla de datos
-    st.subheader("Registros recientes")
-    st.dataframe(df_f.sort_values(by='Fecha', ascending=False), use_container_width=True)
+    
+    st.subheader("📋 Registros en la Hoja de Cálculo")
+    st.dataframe(df.sort_values(by='Fecha', ascending=False), use_container_width=True)
