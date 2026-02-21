@@ -3,58 +3,79 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import plotly.express as px
-import os
 
-st.set_page_config(page_title="Monitor Lechería Pro", layout="wide")
+# --- CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="Lechería Real-Time", layout="wide", page_icon="🥛")
 
+@st.cache_data(ttl=60) # Se actualiza cada minuto para tiempo real
 def load_data():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
     try:
-        # LÓGICA HÍBRIDA DE SEGURIDAD
+        # 1. INTENTO DE CONEXIÓN (Nube vs Local)
         if "gcp_service_account" in st.secrets:
-            # Si estamos en la NUBE (Streamlit Cloud)
-            creds_info = st.secrets["gcp_service_account"]
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_info, scope)
-        elif os.path.exists("credenciales.json"):
-            # Si estamos en LOCAL (Tu computadora)
-            creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+            # Para el celular (Streamlit Cloud)
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         else:
-            st.error("❌ No se encontraron credenciales (ni en la nube ni local).")
-            return None
-
+            # Para tu computadora
+            creds = ServiceAccountCredentials.from_json_keyfile_name("credenciales.json", scope)
+        
         client = gspread.authorize(creds)
-        # Asegúrate de que el nombre coincida con tu Drive
+        
+        # 2. APERTURA DE LA HOJA
+        # Asegúrate de que el nombre sea exacto como en tu Drive
         sheet = client.open("Registro de Producción Lechera").sheet1
         
-        df = pd.DataFrame(sheet.get_all_records())
+        # 3. PROCESAMIENTO LIMPIO
+        data = sheet.get_all_records()
+        if not data:
+            return pd.DataFrame()
+            
+        df = pd.DataFrame(data)
         
-        # Limpieza de columnas
+        # Limpieza de columnas (Soluciona el KeyError y los espacios)
         df.columns = df.columns.str.strip()
-        df = df[df['Nombre Vaca'] != ""].copy()
+        
+        # Conversión de tipos basada en tus datos
         df['Fecha'] = pd.to_datetime(df['Fecha'], dayfirst=True, errors='coerce')
         df['Cantidad litros'] = pd.to_numeric(df['Cantidad litros'], errors='coerce')
+        df['Nombre Vaca'] = df['Nombre Vaca'].str.strip().str.capitalize()
         
-        return df
+        return df.dropna(subset=['Cantidad litros', 'Nombre Vaca'])
+
     except Exception as e:
-        st.error(f"Error de conexión: {e}")
+        # Aquí capturamos el error real y no el <Response [200]>
+        st.error(f"Error en la carga: {e}")
         return None
 
-# --- RENDERIZADO DE LA APP ---
+# --- INTERFAZ DEL DASHBOARD ---
 df = load_data()
 
-if df is not None:
+if df is not None and not df.empty:
     st.title("🥛 Monitor de Producción Real-Time")
     
-    # KPIs Rápidos
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Litros", f"{df['Cantidad litros'].sum():,.1f}")
-    c2.metric("Promedio/Vaca", f"{df['Cantidad litros'].mean():,.2f}")
-    c3.metric("Última Fecha", df['Fecha'].max().strftime('%d/%m/%Y'))
+    # KPIs Estilo App Móvil
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Litros", f"{df['Cantidad litros'].sum():,.1f}")
+    m2.metric("Promedio/Vaca", f"{df['Cantidad litros'].mean():,.2f}")
+    m3.metric("Último Registro", df['Fecha'].max().strftime('%d/%m/%Y'))
 
-    # Gráfico de Evolución
-    fig = px.line(df, x='Fecha', y='Cantidad litros', color='Nombre Vaca', markers=True)
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.subheader("📋 Registros en la Hoja de Cálculo")
-    st.dataframe(df.sort_values(by='Fecha', ascending=False), use_container_width=True)
+    st.divider()
+
+    # Gráfico de Tendencia (Evolución diaria)
+    st.subheader("📈 Evolución del Hato")
+    df_diario = df.groupby('Fecha')['Cantidad litros'].sum().reset_index()
+    fig_evol = px.line(df_diario, x='Fecha', y='Cantidad litros', markers=True, template="plotly_dark")
+    st.plotly_chart(fig_evol, use_container_width=True)
+
+    # Comparativa de Vacas
+    st.subheader("🐮 Producción por Vaca")
+    fig_bar = px.bar(df, x='Nombre Vaca', y='Cantidad litros', color='Nombre Vaca', barmode='group')
+    st.plotly_chart(fig_bar, use_container_width=True)
+
+    # Tabla de control para el celular
+    with st.expander("Ver registros completos"):
+        st.dataframe(df.sort_values('Fecha', ascending=False), use_container_width=True)
+else:
+    st.warning("Esperando datos... Asegúrate de que la hoja 'Registro de Producción Lechera' tenga información.")
