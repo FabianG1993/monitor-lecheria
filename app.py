@@ -94,10 +94,11 @@ with col_right:
     st.plotly_chart(fig_pie, use_container_width=True)
 
     # Tabla de control para el celular
-    with st.expander("Ver registros completos"):
+with st.expander("Ver registros completos"):
         st.dataframe(df.sort_values('Fecha', ascending=False), use_container_width=True)
 else:
     st.warning("Esperando datos... Asegúrate de que la hoja 'Datos Lechería' tenga información.")
+
 
 
 
