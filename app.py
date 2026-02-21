@@ -75,29 +75,30 @@ if df is not None and not df.empty:
     st.plotly_chart(fig_bar, use_container_width=True)
 
     # --- ANÁLISIS AVANZADO ---
-st.markdown("---")
-st.subheader("🧪 Inteligencia de Producción")
+    st.markdown("---")
+    st.subheader("🧪 Inteligencia de Producción")
 
-col_left, col_right = st.columns(2)
+    col_left, col_right = st.columns(2)
 
-with col_left:
-    st.write("**Distribución y Estabilidad (Boxplot)**")
+    with col_left:
+        st.write("**Distribución y Estabilidad (Boxplot)**")
     # Este gráfico muestra quién es más constante
-    fig_box = px.box(df, x="Nombre Vaca", y="Cantidad litros", color="Nombre Vaca", points="all")
-    st.plotly_chart(fig_box, use_container_width=True)
+        fig_box = px.box(df, x="Nombre Vaca", y="Cantidad litros", color="Nombre Vaca", points="all")
+        st.plotly_chart(fig_box, use_container_width=True)
 
-with col_right:
-    st.write("**Rendimiento Individual Acumulado**")
+    with col_right:
+        st.write("**Rendimiento Individual Acumulado**")
     # Suma histórica por vaca para ver quién ha aportado más al negocio
-    df_acum = df.groupby('Nombre Vaca')['Cantidad litros'].sum().sort_values(ascending=False).reset_index()
-    fig_pie = px.pie(df_acum, values='Cantidad litros', names='Nombre Vaca', hole=0.3)
-    st.plotly_chart(fig_pie, use_container_width=True)
+        df_acum = df.groupby('Nombre Vaca')['Cantidad litros'].sum().sort_values(ascending=False).reset_index()
+        fig_pie = px.pie(df_acum, values='Cantidad litros', names='Nombre Vaca', hole=0.3)
+        st.plotly_chart(fig_pie, use_container_width=True)
 
     # Tabla de control para el celular
     with st.expander("Ver registros completos"):
         st.dataframe(df.sort_values('Fecha', ascending=False), use_container_width=True)
-    else:
+else:
     st.warning("Esperando datos... Asegúrate de que la hoja 'Datos Lechería' tenga información.")
+
 
 
 
