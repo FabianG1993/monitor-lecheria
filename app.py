@@ -25,7 +25,7 @@ def load_data():
         
         # 2. APERTURA DE LA HOJA
         # Asegúrate de que el nombre sea exacto como en tu Drive
-        sheet = client.open("Datos lechería").sheet1
+        sheet = client.open("Datos Lechería").sheet1
         
         # 3. PROCESAMIENTO LIMPIO
         data = sheet.get_all_records()
@@ -79,4 +79,5 @@ if df is not None and not df.empty:
         st.dataframe(df.sort_values('Fecha', ascending=False), use_container_width=True)
 else:
     st.warning("Esperando datos... Asegúrate de que la hoja 'Registro de Producción Lechera' tenga información.")
+
 
